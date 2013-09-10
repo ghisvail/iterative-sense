@@ -14,7 +14,7 @@ VERSION = itsense.__version__
 
 DISTNAME = 'iterative-sense'
 DESCRIPTION = 'A Python implementation of the iterative SENSE solver'
-LONG_DESCRIPTION = open('README.rst').read()
+LONG_DESCRIPTION = open('README.md').read()
 MAINTAINER = 'Ghislain Vaillant'
 MAINTAINER_EMAIL = 'ghisvail@gmail.com'
 LICENSE = 'GPL'
