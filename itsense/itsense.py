@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-module pysense.solver
-"""
+
 from __future__ import division
 import numpy as np
 from pykrylov.linop import (BlockLinearOperator, BlockDiagonalLinearOperator,

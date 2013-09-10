@@ -1,5 +1,5 @@
 """
-itsense: A Python implementation of the iterative SENSE solver
+itsense: a Python implementation of the iterative SENSE solver
 """
 
 __version__ = '0.1.0'
