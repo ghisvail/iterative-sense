@@ -20,6 +20,7 @@ class NfftOperator(object):
         self.plan = plan
         self.nargin = self.plan.N_total
         self.nargout = self.plan.M_total
+        self.dtype = np.complex128
     def direct(self, f_hat):
         self.plan.f_hat = f_hat
         self.plan.trafo()
@@ -67,7 +68,8 @@ class IterativeSenseSolver(object):
 
         Nfft = NfftOperator(self._plan)
         F = LinearOperator(nargin=Nfft.nargin, nargout=Nfft.nargout,
-                           matvec=Nfft.direct, matvec_transp=Nfft.adjoint)
+                           matvec=Nfft.direct, matvec_transp=Nfft.adjoint,
+                           dtype=Nfft.dtype)
         blocks = [[F * DiagonalOperator(_s)] for _s in s]
         self._E = BlockLinearOperator(blocks)
 
@@ -90,8 +92,8 @@ class IterativeSenseSolver(object):
         # initialize CG solver
         D, E, I = (self._D, self._E, self._I)
         A = I * E.T * D * E * I
-        matvec = lambda x: A * x
-        self.solver = CG(matvec=matvec, matvec_max=self.niter)        
+        #matvec = lambda x: A * x
+        self.solver = CG(op=A, matvec_max=self.niter)        
 
     def solve(self, m):
         """
