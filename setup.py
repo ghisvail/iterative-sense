@@ -42,7 +42,7 @@ def setup_package():
         description=DESCRIPTION,
         install_requires=[
             "pykrylov >= 0.1.1",
-            "pynfft >= 1.1",],
+            "pynfft > 1.0",],
         license=LICENSE,
         long_description=LONG_DESCRIPTION,
         url=URL,
