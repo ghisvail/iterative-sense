@@ -11,100 +11,74 @@ from pynfft import NFFT
 __all__ = ['IterativeSenseSolver',]
 
 
-class NfftOperator(object):
-    """
-    Wrapper class for the pynfft.NFFT object used by the iterative SENSE \
-    solver.
-    """
-    def __init__(self, plan):
-        self.plan = plan
-        self.nargin = self.plan.N_total
-        self.nargout = self.plan.M_total
-        self.dtype = np.complex128
-    def direct(self, f_hat):
-        self.plan.f_hat = f_hat
-        self.plan.trafo()
-        return self.plan.f
-    def adjoint(self, f):
-        self.plan.f = f
-        self.plan.adjoint()
-        return self.plan.f_hat
-
-
 class IterativeSenseSolver(object):
-    def __init__(self, k, s, d=None, niter=10, nc=None, nk=None, N=None,
-                 **kwargs):
+    def __init__(self, k, s, w=None, niter=10, **kwargs):
         """
         TODO: empty docsting
         """
-        self.nk = nk or np.prod(k.shape[:-1])
-        self.nc = nc or s.shape[0]
-        self.N = N or s.shape[1:]
-        self.k = k
-        self.s = s
-        self.d = d
-        self.niter = niter
-
-        # precompute shared plan for each FT operations
-        self._plan = NFFT(N=self.N, M=self.nk)
-        self._plan.x = k
+        # get geometry
+        ncoils = len(s)
+        ndims = s[0].ndim 
+        ngrid = s[0].shape
+        nknots = k.size / ndims
+        k = k.reshape([nknots, ndims])
+        
+        # set shared plan for each ForFT and AdjFT operations
+        self._plan = get_plan(nknots, ngrid)
+        self._plan.precompute(k)
 
         # define linear operators for iterative SENSE algo
-        nk = self.nk
-        nc = self.nc        
-        d = self.d.ravel() if self.d is not None else None
-        s = self.s.reshape([nc, -1])
-        
-        if d is not None:
-            D_diag = DiagonalOperator(diag=d)
+        if w is not None:
+            D_block = DiagonalOperator(diag=w.ravel())
         else:
-            D_diag = IdentityOperator(nargin=nk)            
-        blocks = [D_diag] * nc
-        self._D = BlockDiagonalLinearOperator(blocks)
+            D_block = IdentityOperator(nargin=nknots)
+        blocks = [D_block] * ncoils
+        D = BlockDiagonalLinearOperator(blocks=blocks)
 
-        diag = 1.0 / np.sqrt((s ** 2).sum(axis=0))
-        diag = diag.ravel()        
-        self._I = DiagonalOperator(diag=diag)
+        diag = np.sqrt(np.sum([_s ** 2 for _s in s], axis=0))       
+        I = DiagonalOperator(diag=diag.ravel())
 
-        Nfft = NfftOperator(self._plan)
-        F = LinearOperator(nargin=Nfft.nargin, nargout=Nfft.nargout,
-                           matvec=Nfft.direct, matvec_transp=Nfft.adjoint,
-                           dtype=Nfft.dtype)
-        blocks = [[F * DiagonalOperator(_s)] for _s in s]
-        self._E = BlockLinearOperator(blocks)
+        F = LinearOperator(
+                nargin=self._plan.N_total,
+                nargout=self._plan.M,
+                matvec=lambda x: self._plan.forward(x),
+                matvec_transp=lambda x: self._plan.adjoint(x),
+                dtype=np.complex128,)
+        blocks = [[F * DiagonalOperator(diag=_s.ravel())] for _s in s]
+        
+        E = BlockLinearOperator(blocks=blocks)
 
-        # solver is initialized separately, avoid long object creation time
-        self.solver = None
+        self.D = D
+        self.E = E
+        self.I = I
+        self.m = None
+        self.rhs = None
+        self.solution = None
+        self.solver = CG(op=I*E.T*D*E*I, matvec_max=self.niter)
 
     def __call__(self, m):
         """
         TODO: empty docstring
         """
-        self.solve(m)
+        self.m = m
+        self.execute()
         return self.solution
-
-    def initialize(self):
+       
+    def execute(self):
         """
         TODO: empty docsting
         """
-        # precompute NFFT plan
-        self._plan.precompute()
-        # initialize CG solver
-        D, E, I = (self._D, self._E, self._I)
-        A = I * E.T * D * E * I
-        #matvec = lambda x: A * x
-        self.solver = CG(op=A, matvec_max=self.niter)        
-
-    def solve(self, m):
-        """
-        TODO: empty docsting
-        """
-        if self.solver is None:
-            raise RuntimeError("Attempted to use non-initialized solver")
-        D, E, I = (self._D, self._E, self._I)        
+        D, E, I, m = (self.D, self.E, self.I, self.m)
         b = I * E.T * D * m
-        self.rhs = b
         self.solver.solve(b)
         b_approx = self.solver.bestSolution
         v_approx = I * b_approx
+        self.rhs = b
         self.solution = v_approx
+
+
+def get_plan(M, N):
+    f = np.empty(M, dtype=np.complex128)
+    f_hat = np.empty(N, dtype=np.complex128)
+    plan = NFFT(f, f_hat)
+    return plan
