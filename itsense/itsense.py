@@ -41,8 +41,8 @@ class IterativeSenseSolver(object):
         F = LinearOperator(
                 nargin=self._plan.N_total,
                 nargout=self._plan.M,
-                matvec=lambda x: self._plan.forward(x),
-                matvec_transp=lambda x: self._plan.adjoint(x),
+                matvec=lambda u: self._plan.forward(f_hat=u),
+                matvec_transp=lambda u: self._plan.adjoint(f=u).ravel(),
                 dtype=np.complex128,)
         blocks = [[F * DiagonalOperator(diag=_s.ravel())] for _s in s]
         
@@ -53,14 +53,15 @@ class IterativeSenseSolver(object):
         self.I = I
         self.m = None
         self.rhs = None
+        self.shape = (ngrid, nknots*ncoils)
         self.solution = None
-        self.solver = CG(op=I*E.T*D*E*I, matvec_max=self.niter)
+        self.solver = CG(op=I*E.T*D*E*I, matvec_max=niter)
 
     def __call__(self, m):
         """
         TODO: empty docstring
         """
-        self.m = m
+        self.m = np.asarray(m).reshape(self.shape[1])
         self.execute()
         return self.solution
        
@@ -73,8 +74,8 @@ class IterativeSenseSolver(object):
         self.solver.solve(b)
         b_approx = self.solver.bestSolution
         v_approx = I * b_approx
-        self.rhs = b
-        self.solution = v_approx
+        self.rhs = b.reshape(self.shape[0])
+        self.solution = v_approx.reshape(self.shape[0])
 
 
 def get_plan(M, N):
